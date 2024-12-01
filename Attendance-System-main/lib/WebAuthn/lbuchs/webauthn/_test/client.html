@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<!--
+Copyright (C) 2022 Lukas Buchs
+license https://github.com/lbuchs/WebAuthn/blob/master/LICENSE MIT
+-->
+<html lang="en">
+<head>
+    <title>lbuchs/WebAuthn Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Added viewport meta -->
+    <script>
+
+    /**
+     * creates a new FIDO2 registration
+     * @returns {undefined}
+     */
+    async function createRegistration() {
+        try {
+            // check browser support
+            if (!window.fetch || !navigator.credentials || !navigator.credentials.create) {
+                throw new Error('Browser not supported.');
+            }
+
+            // get create args
+            let rep = await window.fetch('server.php?fn=getCreateArgs' + getGetParams(), {method:'GET', cache:'no-cache'});
+            const createArgs = await rep.json();
+
+            // error handling
+            if (createArgs.success === false) {
+                throw new Error(createArgs.msg || 'unknown error occurred');
+            }
+
+            // replace binary base64 data with ArrayBuffer
+            recursiveBase64StrToArrayBuffer(createArgs);
+
+            // create credentials
+            const cred = await navigator.credentials.create(createArgs);
+
+            // create object
+            const authenticatorAttestationResponse = {
+                transports: cred.response.getTransports  ? cred.response.getTransports() : null,
+                clientDataJSON: cred.response.clientDataJSON  ? arrayBufferToBase64(cred.response.clientDataJSON) : null,
+                attestationObject: cred.response.attestationObject ? arrayBufferToBase64(cred.response.attestationObject) : null
+            };
+
+            // check auth on server side
+            rep = await window.fetch('server.php?fn=processCreate' + getGetParams(), {
+                method  : 'POST',
+                body    : JSON.stringify(authenticatorAttestationResponse),
+                cache   : 'no-cache'
+            });
+            const authenticatorAttestationServerResponse = await rep.json();
+
+            // prompt server response
+            if (authenticatorAttestationServerResponse.success) {
+                reloadServerPreview();
+                window.alert(authenticatorAttestationServerResponse.msg || 'registration success');
+            } else {
+                throw new Error(authenticatorAttestationServerResponse.msg);
+            }
+
+        } catch (err) {
+            reloadServerPreview();
+            window.alert(err.message || 'unknown error occurred');
+        }
+    }
+
+    // Other functions...
+
+    </script>
+    <style>
+        body {
+            font-family:sans-serif;
+            margin: 0 20px;
+            padding: 0;
+        }
+        .splitter {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            margin: 0;
+            padding: 0;
+        }
+        .splitter > .form {
+            flex: 1;
+            min-width: 600px;
+        }
+        .splitter > .serverPreview {
+            width: 740px;
+            min-height: 700px;
+            margin: 0;
+            padding: 0;
+            border: 1px solid grey;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .splitter > .serverPreview iframe {
+            width: 700px;
+            flex: 1;
+            border: 0;
+        }
+
+    </style>
+</head>
+<body>
+    <!--
+    <h1 style="margin: 40px 10px 2px 0;">lbuchs/WebAuthn</h1>
+    <div style="font-style: italic;">A simple PHP WebAuthn (FIDO2) server library.</div>
+    -->
+    <div class="splitter">
+        <div class="form">
+            <!-- Form content -->
+        </div>
+        <div class="serverPreview">
+            <p style="margin-left:10px;font-weight: bold;">Here you can see what's saved on the server:</p>
+            <!--
+            <iframe src="server.php?fn=getStoredDataHtml" id="serverPreview"></iframe>
+            -->
+            <iframe src="server.php?fn=getStoredDataHtml" id="serverPreview" title="Server Preview"></iframe>
+        </div>
+    </div>
+    <!-- Closing div for the splitter -->
+    </div>
+</body>
+</html>
